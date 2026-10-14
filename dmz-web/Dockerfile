@@ -10,3 +10,10 @@ RUN apk add --no-cache curl iproute2 openssl \
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY html/ /usr/share/nginx/html/
+
+# A imagem do Nginx executa tudo que estiver em /docker-entrypoint.d/ antes de iniciar o servidor.
+COPY 40-gateway.sh /docker-entrypoint.d/40-gateway.sh
+
+# Remove o CR do fim de linha do Windows (se houver) e torna o script executável.
+RUN sed -i 's/\r$//' /docker-entrypoint.d/40-gateway.sh \
+  && chmod +x /docker-entrypoint.d/40-gateway.sh

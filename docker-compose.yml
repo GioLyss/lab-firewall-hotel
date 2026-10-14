@@ -1,48 +1,164 @@
 # =============================================================================
-# Etapa 1: o cenário de hoje. Portal, PMS, banco e estações na MESMA rede, sem firewall.
-# Para subir: docker compose up -d --build
+# Laboratório de firewall Linux (Netfilter/iptables): LAN | EXTERNA | FIREWALL | DMZ
+# Caso fictício: Hotel Vale Verde
+#
+#   rede_lan      10.66.1.0/24   recepcao   (perfil recepção, rede interna do hotel)
+#   rede_externa  10.66.3.0/24   hospede    (perfil usuário: o hóspede, vem de fora)
+#   rede_dmz      10.66.2.0/24   dmz-web (portal), dmz-pms (API) e dmz-db (banco)
+#   firewall      está nas três redes e é o gateway padrão de todos os outros
+#
+# Os endereços vêm do arquivo .env (mesma pasta).
+# Para subir: docker compose up -d
 # =============================================================================
 name: fwhotel
 
 services:
 
-  # --- Portal de reservas (Nginx, portas 80 e 443) ---------------------------
+  # --- Firewall: gateway entre as três zonas ---------------------------------
+  firewall:
+    build: ./firewall
+    init: true
+    cap_add:
+      - NET_ADMIN                       # permite usar o iptables dentro do container
+    sysctls:
+      net.ipv4.ip_forward: "1"          # encaminha pacotes entre as redes
+    environment:
+      FW_LAN_IP: ${FW_LAN_IP}
+      FW_EXT_IP: ${FW_EXT_IP}
+      FW_DMZ_IP: ${FW_DMZ_IP}
+      LAN_SUBNET: ${LAN_SUBNET}
+      EXT_SUBNET: ${EXT_SUBNET}
+      WEB_IP: ${WEB_IP}
+      PMS_IP: ${PMS_IP}
+      DB_IP: ${DB_IP}
+    networks:
+      rede_lan:
+        ipv4_address: ${FW_LAN_IP}
+      rede_externa:
+        ipv4_address: ${FW_EXT_IP}
+      rede_dmz:
+        ipv4_address: ${FW_DMZ_IP}
+
+  # --- DMZ: portal de reservas (Nginx, portas 80 e 443) ----------------------
   dmz-web:
     build: ./dmz-web
     init: true
+    cap_add:
+      - NET_ADMIN                       # só para apontar o gateway padrão para o firewall na subida
+    environment:
+      GATEWAY_IP: ${FW_DMZ_IP}
+      RECEPCAO_IP: ${RECEPCAO_IP}
+      HOSPEDE_IP: ${HOSPEDE_IP}
+      DB_IP: ${DB_IP}
+    networks:
+      rede_dmz:
+        ipv4_address: ${WEB_IP}
 
-  # --- API do PMS, o sistema de gestão do hotel (Nginx, HTTPS na porta 8443) --
+  # --- DMZ: API do PMS, o sistema de gestão do hotel (Nginx, HTTPS na porta 8443) ---
   dmz-pms:
-    build: ./dmz-web          # mesma imagem do portal; só a configuração do Nginx muda
+    build: ./dmz-web                    # mesma imagem do portal; só a configuração do Nginx muda
     init: true
+    cap_add:
+      - NET_ADMIN                       # só para apontar o gateway padrão para o firewall na subida
+    environment:
+      GATEWAY_IP: ${FW_DMZ_IP}
     volumes:
       - ./dmz-pms/nginx.conf:/etc/nginx/conf.d/default.conf:ro   # troca a configuração do portal
+    networks:
+      rede_dmz:
+        ipv4_address: ${PMS_IP}
 
-  # --- Banco de dados das reservas (PostgreSQL) ------------------------------
+  # --- DMZ: banco de dados das reservas (PostgreSQL) -------------------------
   dmz-db:
     image: postgres:16-alpine
     init: true
+    cap_add:
+      - NET_ADMIN                       # só para apontar o gateway padrão para o firewall na subida
+    # Aponta o gateway padrão para o firewall e, em seguida, entrega o controle ao entrypoint original do PostgreSQL.
+    entrypoint:
+      - /bin/sh
+      - -c
+      - ip route replace default via "$$GATEWAY_IP" && exec docker-entrypoint.sh postgres
     environment:
       POSTGRES_DB: ${DB_NAME}
       POSTGRES_USER: ${DB_USER}
       POSTGRES_PASSWORD: ${DB_PASSWORD}
+      GATEWAY_IP: ${FW_DMZ_IP}
     volumes:
       - dbdata:/var/lib/postgresql/data                          # dados persistem entre reinícios
       - ./dmz-db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+    networks:
+      rede_dmz:
+        ipv4_address: ${DB_IP}
 
-  # --- Estação da recepção ---------------------------------------------------
+  # --- LAN interna: estação da recepção (perfil recepção) --------------------
   recepcao:
     build: ./cliente
     init: true
+    cap_add:
+      - NET_ADMIN                       # só para apontar o gateway padrão para o firewall na subida
     environment:
       PERFIL: recepcao
+      GATEWAY_IP: ${FW_LAN_IP}
+      OUTRO_IP: ${HOSPEDE_IP}           # estação da outra zona (usada nos testes)
+      WEB_IP: ${WEB_IP}
+      PMS_IP: ${PMS_IP}
+      DB_IP: ${DB_IP}
+    extra_hosts:                        # nomes da DMZ (o DNS do Docker não cruza redes)
+      dmz-web: ${WEB_IP}
+      dmz-pms: ${PMS_IP}
+      dmz-db: ${DB_IP}
+    networks:
+      rede_lan:
+        ipv4_address: ${RECEPCAO_IP}
 
-  # --- Hóspede (usuário) -----------------------------------------------------
+  # --- Rede EXTERNA: hóspede (perfil usuário) --------------------------------
   hospede:
     build: ./cliente
     init: true
+    cap_add:
+      - NET_ADMIN                       # só para apontar o gateway padrão para o firewall na subida
     environment:
       PERFIL: hospede
+      GATEWAY_IP: ${FW_EXT_IP}
+      OUTRO_IP: ${RECEPCAO_IP}          # estação da outra zona (usada nos testes)
+      WEB_IP: ${WEB_IP}
+      PMS_IP: ${PMS_IP}
+      DB_IP: ${DB_IP}
+    extra_hosts:                        # nomes da DMZ (o DNS do Docker não cruza redes)
+      dmz-web: ${WEB_IP}
+      dmz-pms: ${PMS_IP}
+      dmz-db: ${DB_IP}
+    networks:
+      rede_externa:
+        ipv4_address: ${HOSPEDE_IP}
+
+# Redes personalizadas (bridge), uma para cada zona.
+# gateway_mode_ipv4=routed: sem NAT, o Docker deixa o firewall rotear entre as redes.
+# (Não usamos "internal: true": em algumas versões o Docker descarta, no host, os pacotes
+# cujo destino está fora da sub-rede da ponte, e o firewall nunca chegaria a vê-los.)
+networks:
+  rede_lan:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: routed
+    ipam:
+      config:
+        - subnet: ${LAN_SUBNET}
+  rede_dmz:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: routed
+    ipam:
+      config:
+        - subnet: ${DMZ_SUBNET}
+  rede_externa:
+    driver: bridge
+    driver_opts:
+      com.docker.network.bridge.gateway_mode_ipv4: routed
+    ipam:
+      config:
+        - subnet: ${EXT_SUBNET}
 
 volumes:
   dbdata:

@@ -31,9 +31,9 @@ CREATE TABLE consumos (
 );
 
 INSERT INTO hospedes (nome, telefone) VALUES
-    ('Hospede Exemplo 1', '(00) 00000-0001'),
-    ('Hospede Exemplo 2', '(00) 00000-0002'),
-    ('Hospede Exemplo 3', '(00) 00000-0003');
+    ('Hospede 1', '(00) 00000-0001'),
+    ('Hospede 2', '(00) 00000-0002'),
+    ('Hospede 3', '(00) 00000-0003');
 
 INSERT INTO reservas (quarto, tipo, hospede_id) VALUES
     ('101', 'solteiro', 1),
