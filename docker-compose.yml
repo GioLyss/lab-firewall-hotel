@@ -1,0 +1,48 @@
+# =============================================================================
+# Etapa 1: o cenário de hoje. Portal, PMS, banco e estações na MESMA rede, sem firewall.
+# Para subir: docker compose up -d --build
+# =============================================================================
+name: fwhotel
+
+services:
+
+  # --- Portal de reservas (Nginx, portas 80 e 443) ---------------------------
+  dmz-web:
+    build: ./dmz-web
+    init: true
+
+  # --- API do PMS, o sistema de gestão do hotel (Nginx, HTTPS na porta 8443) --
+  dmz-pms:
+    build: ./dmz-web          # mesma imagem do portal; só a configuração do Nginx muda
+    init: true
+    volumes:
+      - ./dmz-pms/nginx.conf:/etc/nginx/conf.d/default.conf:ro   # troca a configuração do portal
+
+  # --- Banco de dados das reservas (PostgreSQL) ------------------------------
+  dmz-db:
+    image: postgres:16-alpine
+    init: true
+    environment:
+      POSTGRES_DB: ${DB_NAME}
+      POSTGRES_USER: ${DB_USER}
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    volumes:
+      - dbdata:/var/lib/postgresql/data                          # dados persistem entre reinícios
+      - ./dmz-db/init.sql:/docker-entrypoint-initdb.d/01-init.sql:ro
+
+  # --- Estação da recepção ---------------------------------------------------
+  recepcao:
+    build: ./cliente
+    init: true
+    environment:
+      PERFIL: recepcao
+
+  # --- Hóspede (usuário) -----------------------------------------------------
+  hospede:
+    build: ./cliente
+    init: true
+    environment:
+      PERFIL: hospede
+
+volumes:
+  dbdata:
