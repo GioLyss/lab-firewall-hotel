@@ -6,7 +6,7 @@ RUN apk add --no-cache curl iproute2 openssl \
     && mkdir -p /etc/nginx/certs \
     && openssl req -x509 -nodes -newkey rsa:2048 -days 825 \
          -keyout /etc/nginx/certs/lab.key -out /etc/nginx/certs/lab.crt \
-         -subj "/CN=dmz-web/O=Hotel Vale Verde (laboratorio)"
+         -subj "/CN=dmz-web/O=   Hotel Vida Boa (laboratorio)"
 
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 COPY html/ /usr/share/nginx/html/

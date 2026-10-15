@@ -1,4 +1,4 @@
--- Banco do Hotel Vale Verde (ficticio).
+-- Banco do    Hotel Vida Boa (ficticio).
 -- Todos os dados abaixo sao FICTICIOS e existem apenas para o laboratorio.
 -- Este script roda uma unica vez, na primeira criacao do volume "dbdata".
 -- No hotel, a "reserva" liga o hospede a um quarto; o "consumo" e o que ele

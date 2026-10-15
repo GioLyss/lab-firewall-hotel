@@ -1,7 +1,7 @@
 #!/bin/sh
 # =============================================================================
 # rules.sh - Regras do firewall (Netfilter/iptables, tabela filter)
-# Caso: Hotel Vale Verde (fictício) - laboratório de Segurança da Informação
+# Caso:    Hotel Vida Boa (fictício) - laboratório de Segurança da Informação
 #
 #   EXTERNA (hóspede) --[ EXT_IF ]                   [ DMZ_IF ]-- DMZ: portal, PMS, banco
 #                                    FIREWALL

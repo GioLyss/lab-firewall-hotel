@@ -1,6 +1,6 @@
 # =============================================================================
 # Laboratório de firewall Linux (Netfilter/iptables): LAN | EXTERNA | FIREWALL | DMZ
-# Caso fictício: Hotel Vale Verde
+# Caso fictício:    Hotel Vida Boa
 #
 #   rede_lan      10.66.1.0/24   recepcao   (perfil recepção, rede interna do hotel)
 #   rede_externa  10.66.3.0/24   hospede    (perfil usuário: o hóspede, vem de fora)
