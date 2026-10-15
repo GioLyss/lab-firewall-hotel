@@ -1,0 +1,8 @@
+# Arquivos temporarios e de editores
+*.log
+*.swp
+*.tmp
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
