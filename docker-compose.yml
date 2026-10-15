@@ -31,6 +31,8 @@ services:
       WEB_IP: ${WEB_IP}
       PMS_IP: ${PMS_IP}
       DB_IP: ${DB_IP}
+    volumes:
+      - ./firewall/rules.sh:/etc/firewall/rules.sh:ro   # regras editáveis sem rebuild
     networks:
       rede_lan:
         ipv4_address: ${FW_LAN_IP}
@@ -38,6 +40,12 @@ services:
         ipv4_address: ${FW_EXT_IP}
       rede_dmz:
         ipv4_address: ${FW_DMZ_IP}
+    healthcheck:                        # "healthy" quando o entrypoint terminou de carregar as regras
+      test: ["CMD-SHELL", "test -f /run/firewall.ready"]
+      interval: 2s
+      timeout: 2s
+      retries: 15
+      start_period: 2s
 
   # --- DMZ: portal de reservas (Nginx, portas 80 e 443) ----------------------
   dmz-web:
@@ -53,6 +61,12 @@ services:
     networks:
       rede_dmz:
         ipv4_address: ${WEB_IP}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS -o /dev/null http://127.0.0.1/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   # --- DMZ: API do PMS, o sistema de gestão do hotel (Nginx, HTTPS na porta 8443) ---
   dmz-pms:
@@ -67,6 +81,12 @@ services:
     networks:
       rede_dmz:
         ipv4_address: ${PMS_IP}
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsSk -o /dev/null https://127.0.0.1:8443/health"]
+      interval: 3s
+      timeout: 3s
+      retries: 10
+      start_period: 5s
 
   # --- DMZ: banco de dados das reservas (PostgreSQL) -------------------------
   dmz-db:
@@ -90,6 +110,12 @@ services:
     networks:
       rede_dmz:
         ipv4_address: ${DB_IP}
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
 
   # --- LAN interna: estação da recepção (perfil recepção) --------------------
   recepcao:
@@ -111,6 +137,15 @@ services:
     networks:
       rede_lan:
         ipv4_address: ${RECEPCAO_IP}
+    depends_on:                         # só inicia depois que firewall e servidores estão prontos
+      firewall:
+        condition: service_healthy
+      dmz-web:
+        condition: service_healthy
+      dmz-pms:
+        condition: service_healthy
+      dmz-db:
+        condition: service_healthy
 
   # --- Rede EXTERNA: hóspede (perfil usuário) --------------------------------
   hospede:
@@ -132,6 +167,15 @@ services:
     networks:
       rede_externa:
         ipv4_address: ${HOSPEDE_IP}
+    depends_on:                         # só inicia depois que firewall e servidores estão prontos
+      firewall:
+        condition: service_healthy
+      dmz-web:
+        condition: service_healthy
+      dmz-pms:
+        condition: service_healthy
+      dmz-db:
+        condition: service_healthy
 
 # Redes personalizadas (bridge), uma para cada zona.
 # gateway_mode_ipv4=routed: sem NAT, o Docker deixa o firewall rotear entre as redes.
